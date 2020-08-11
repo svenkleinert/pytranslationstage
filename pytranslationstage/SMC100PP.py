@@ -43,9 +43,9 @@ class SMC100PP( ):
         if not self.device.is_open:
             self.device.close()
         self.controller_number = str(controller_number)
-        
-        self.reset_controller()
-        self.home_search()
+        if not "READY" in controller_states[self.get_controller_state()]:
+            self.reset_controller()
+            self.home_search()
         self.name = "SMC100PP (" + serial_port + ")"
 
         
@@ -92,13 +92,15 @@ class SMC100PP( ):
         selection = input( "[SMC100PP] Choose serial port:\n" + s )
         return port_list[int(selection)].device
 
-    def reset_controller( self ):
+    def reset_controller( self, timeout=30 ):
         if DEBUG:
             print( "[SMC100PP] reset" )
         self.write( "RS" )
         time.sleep(1)
+        start = time.time()
         while( self.get_controller_state() != "0A" ):
-            pass
+            if (time.time()-start) > timeout:
+                return False
         if self.get_controller_state() == "0A":
             if DEBUG:
                 print( "[SMC100PP] reset done!" )
@@ -109,17 +111,21 @@ class SMC100PP( ):
         state = reply[-2:]
         return state
 
-    def home_search( self ):
+    def home_search( self, timeout=30 ):
         if DEBUG:
             print( "[SMC100PP] home search" )
 
         self.write( "OR" )
+        start = time.time()
         while self.get_controller_state() == '0A':
-            pass
+            if (time.time()-start) > timeout:
+                return False
         while self.get_controller_state() == "1E":
-            pass      
+            if (time.time()-start) > timeout:
+                return False
         while self.get_controller_state() != "32":
-            pass
+            if (time.time()-start) > timeout:
+                return False
         if self.get_controller_state() == "32":
             if DEBUG:
                 print( "[SMC100PP] home search done!" )
@@ -130,7 +136,7 @@ class SMC100PP( ):
         _pos = self.query( "TP" )
         return _pos[3:]
 
-    def move_absolute( self, position ):
+    def move_absolute( self, position, timeout=None ):
         if DEBUG:
             print( "[SMC100PP] move absolute {0:.2f}".format( position ) )
         old_pos = self.query( "PA?" )
@@ -144,12 +150,18 @@ class SMC100PP( ):
             return True
         if DEBUG:
                 print( "[SMC100PP] move absolute: serial write!" )
+        if timeout is None:
+            distance = position - float( old_pos )
+            timeout = 3 * float( self.query( "PT{0:.2f}".format(distance) )[len(str(self.controller_number))+2:] )
+        start = time.time()
         self.write( "PA" + target )
         try:
             _pos = float(self.query( "PA?" )[len(str(self.controller_number))+2:])
         except:
             _pos = 1e30
         while abs( _pos  - float(target) ) < abs( float(old_pos) - float(target) ):
+            if (time.time() - start) > timeout:
+                return False
             self.write( "PA"+target )
             try:
                 _pos = float(self.query( "PA?" )[len(str(self.controller_number))+2:])
@@ -158,18 +170,23 @@ class SMC100PP( ):
         if DEBUG:
                 print( "[SMC100PP] move absolute: moving!" )
         while self.get_controller_state() != "33":
-            pass
+            if (time.time()-start) > timeout:
+                return False
         if self.get_controller_state() == "33":
             if DEBUG:
                 print( "[SMC100PP] move absolute done!" )
             return True
         return False
 
-    def move_relative( self, position ):
+    def move_relative( self, position, timeout=None ):
         while self.get_controller_state() != "28":
             self.write( "PR{0:.2f}".format( position ) )
+        if timeout is None:
+            timeout = 3 * float( self.query( "PT{0:.2f}".format(position) )[len(str(self.controller_number))+2:] )
+        start = time.time()
         while self.get_controller_state() != "33":
-            pass
+            if (time.time() - start ) > timeout:
+                return False
         if self.get_controller_state() != "33":
             return True
         return False
