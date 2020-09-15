@@ -56,6 +56,7 @@ class SMC100PP( ):
         self.device.close()
 
     def write( self, msg ):
+        self.device.reset_output_buffer()
         nbytes = self.device.write( (self.controller_number+msg+"\r\n").encode( "utf-8" ) )
         if nbytes == len( msg )+len(self.controller_number)+2:
             return True
@@ -79,6 +80,7 @@ class SMC100PP( ):
         return ""
 
     def query( self, msg ):
+        self.device.reset_input_buffer()
         if self.write( msg ):
             return self.read_line()
         return ""
