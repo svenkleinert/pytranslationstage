@@ -1,11 +1,12 @@
-import serial
-import serial.tools.list_ports
+import pyvisa 
+import pyvisa.constants
 import time
 DEBUG = True
 
 class SMC100PP( ):
     def scan():
-        return [d.device for d in serial.tools.list_ports.comports()]
+        rm = pyvisa.ResourceManager()
+        return [r[1].alias for r in rm.list_resources_info("ASRL?*::INSTR").items]
 
     def from_device( device ):
         return SMC100PP( serial_port=device )
@@ -34,12 +35,25 @@ class SMC100PP( ):
         "46":"JOGGING from READY",
         "47":"JOGGING from DISABLE"
         }
-    def __init__( self, serial_port=None, controller_number=1 ):
+    def __init__( self, serial_port=None, resource_manager=None, controller_number=1 ):
         self.retry = 0
+        if resource_mager is None:
+            resource_manager = pyvisa.ResourceManager()
+        self.resource_manager = resource_manager
+
         if serial_port is None:
             serial_port = self.serial_port_dialog()
+        
+        self.device = self.resource_manager.open_resource( serial_port )
+        self.device.baud_rate = baudrate
+        self.device.data_bits = 8
+        self.device.parity = 0
+        self.device.stop_bits = 1
+        self.device.set_visa_attribute(constants.VI_ATTR_ASRL_FLOW_CNTRL, constants.VI_ASRL_FLOW_XON_XOFF)
+        self.device.write_termination = "\r\n"
+        self.device.read_termination = "\r\n"
 
-        self.device = serial.Serial( serial_port, self.baudrate, xonxoff=True, timeout=1, write_timeout=15 )
+
         if not self.device.is_open:
             self.device.close()
         self.controller_number = str(controller_number)
@@ -56,7 +70,7 @@ class SMC100PP( ):
         self.device.close()
 
     def write( self, msg ):
-        nbytes = self.device.write( (self.controller_number+msg+"\r\n").encode( "utf-8" ) )
+        nbytes = self.device.write( self.controller_number + msg )
         if nbytes == len( msg )+len(self.controller_number)+2:
             return True
         return False
@@ -64,31 +78,15 @@ class SMC100PP( ):
     def read( self ):
         return self.device.read()
 
-    def read_line( self ):
-        s = ""
-        c = self.device.readline()
-        if self.retry < 10:
-            try:
-                s = c.decode("utf-8").strip()
-                self.retry = 0
-                return s
-            except:
-                self.retry +=1
-                return self.read_line()
-        self.retry = 0
-        return ""
-
     def query( self, msg ):
-        if self.write( msg ):
-            return self.read_line()
-        return ""
+        return self.device.query( self.controller_number + msg )
 
     def serial_port_dialog( self ):
         s = ""
-        port_list = serial.tools.list_ports.comports()
+        port_list = [r[1].alias for r in self.resource_manager.list_resources_info("ASRL?*::INSTR").items]
         for i, port_info in enumerate( port_list ):
-            print( port_info.name )
-            s+= "\t" + str(i) + ") " + port_info.description + "\n"
+            print( port_info )
+            s+= "\t" + str(i) + ") " + port_info + "\n"
         selection = input( "[SMC100PP] Choose serial port:\n" + s )
         return port_list[int(selection)].device
 
