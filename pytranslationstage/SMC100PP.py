@@ -39,11 +39,11 @@ class SMC100PP( ):
         if serial_port is None:
             serial_port = self.serial_port_dialog()
 
-        self.device = serial.Serial( serial_port, self.baudrate, xonxoff=True, timeout=1 )
+        self.device = serial.Serial( serial_port, self.baudrate, xonxoff=True, timeout=1, write_timeout=15 )
         if not self.device.is_open:
             self.device.close()
         self.controller_number = str(controller_number)
-        if not "READY" in controller_states[self.get_controller_state()]:
+        if not "READY" in self.controller_states[self.get_controller_state()]:
             self.reset_controller()
             self.home_search()
         self.name = "SMC100PP (" + serial_port + ")"
@@ -56,7 +56,6 @@ class SMC100PP( ):
         self.device.close()
 
     def write( self, msg ):
-        self.device.reset_output_buffer()
         nbytes = self.device.write( (self.controller_number+msg+"\r\n").encode( "utf-8" ) )
         if nbytes == len( msg )+len(self.controller_number)+2:
             return True
@@ -73,14 +72,13 @@ class SMC100PP( ):
                 s = c.decode("utf-8").strip()
                 self.retry = 0
                 return s
-
             except:
                 self.retry +=1
                 return self.read_line()
+        self.retry = 0
         return ""
 
     def query( self, msg ):
-        self.device.reset_input_buffer()
         if self.write( msg ):
             return self.read_line()
         return ""
@@ -154,12 +152,17 @@ class SMC100PP( ):
                 print( "[SMC100PP] move absolute: serial write!" )
         if timeout is None:
             distance = position - float( old_pos )
-            timeout = 3 * float( self.query( "PT{0:.2f}".format(distance) )[len(str(self.controller_number))+2:] )
+            timeout = self.query( "PT{0:.2f}".format(distance) )
+            try:
+                timeout = 1.5 * float( timeout[len(str(self.controller_number))+2:] )
+            except ValueError:
+                timeout = 15
+
         start = time.time()
         self.write( "PA" + target )
         try:
             _pos = float(self.query( "PA?" )[len(str(self.controller_number))+2:])
-        except:
+        except ValueError:
             _pos = 1e30
         while abs( _pos  - float(target) ) < abs( float(old_pos) - float(target) ):
             if (time.time() - start) > timeout:
