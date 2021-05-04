@@ -6,7 +6,7 @@ DEBUG = True
 class SMC100PP( ):
     def scan():
         rm = pyvisa.ResourceManager()
-        return [r[1].alias for r in rm.list_resources_info("ASRL?*::INSTR").items]
+        return [r[1].alias for r in rm.list_resources_info("ASRL?*::INSTR").items()]
 
     def from_device( device ):
         return SMC100PP( serial_port=device )
@@ -37,25 +37,21 @@ class SMC100PP( ):
         }
     def __init__( self, serial_port=None, resource_manager=None, controller_number=1 ):
         self.retry = 0
-        if resource_mager is None:
+        if resource_manager is None:
             resource_manager = pyvisa.ResourceManager()
         self.resource_manager = resource_manager
-
+        
         if serial_port is None:
             serial_port = self.serial_port_dialog()
-        
         self.device = self.resource_manager.open_resource( serial_port )
-        self.device.baud_rate = baudrate
+        self.device.baud_rate = self.baudrate
         self.device.data_bits = 8
-        self.device.parity = 0
-        self.device.stop_bits = 1
-        self.device.set_visa_attribute(constants.VI_ATTR_ASRL_FLOW_CNTRL, constants.VI_ASRL_FLOW_XON_XOFF)
+        self.device.parity = pyvisa.constants.Parity.none
+        self.device.stop_bits = pyvisa.constants.StopBits.one
+        self.device.set_visa_attribute(pyvisa.constants.VI_ATTR_ASRL_FLOW_CNTRL, pyvisa.constants.VI_ASRL_FLOW_XON_XOFF)
         self.device.write_termination = "\r\n"
         self.device.read_termination = "\r\n"
 
-
-        if not self.device.is_open:
-            self.device.close()
         self.controller_number = str(controller_number)
         if not "READY" in self.controller_states[self.get_controller_state()]:
             self.reset_controller()
@@ -79,11 +75,14 @@ class SMC100PP( ):
         return self.device.read()
 
     def query( self, msg ):
-        return self.device.query( self.controller_number + msg )
+        try:
+            return self.device.query( self.controller_number + msg, 0.5 )
+        except Exception as inst:
+            print( inst )
 
     def serial_port_dialog( self ):
         s = ""
-        port_list = [r[1].alias for r in self.resource_manager.list_resources_info("ASRL?*::INSTR").items]
+        port_list = [r[1].alias for r in self.resource_manager.list_resources_info("ASRL?*::INSTR").items()]
         for i, port_info in enumerate( port_list ):
             print( port_info )
             s+= "\t" + str(i) + ") " + port_info + "\n"
@@ -91,12 +90,14 @@ class SMC100PP( ):
         return port_list[int(selection)].device
 
     def reset_controller( self, timeout=30 ):
+        return
         if DEBUG:
             print( "[SMC100PP] reset" )
         self.write( "RS" )
-        time.sleep(1)
+        time.sleep(3)
         start = time.time()
         while( self.get_controller_state() != "0A" ):
+            print( "test" )
             if (time.time()-start) > timeout:
                 return False
         if self.get_controller_state() == "0A":
@@ -106,8 +107,13 @@ class SMC100PP( ):
 
     def get_controller_state( self ):
         reply = self.query( "TS" )
-        state = reply[-2:]
-        return state
+        try:
+            if len( reply ) > 2:
+                state = reply[-2:]
+                return state
+        except TypeError:
+            pass
+        return "0A"
 
     def home_search( self, timeout=30 ):
         if DEBUG:
@@ -137,9 +143,12 @@ class SMC100PP( ):
     def move_absolute( self, position, timeout=None ):
         if DEBUG:
             print( "[SMC100PP] move absolute {0:.2f}".format( position ) )
-        old_pos = self.query( "PA?" )
-        while( "PA" not in old_pos ):
+        try:
             old_pos = self.query( "PA?" )
+            while( "PA" not in old_pos ):
+                old_pos = self.query( "PA?" )
+        except TypeError:
+            old_pos = "PA010"
         old_pos = old_pos[old_pos.find( "PA" )+2:]
         target = "{0:.2f}".format( position )
         if old_pos == target:
@@ -152,15 +161,18 @@ class SMC100PP( ):
             distance = position - float( old_pos )
             timeout = self.query( "PT{0:.2f}".format(distance) )
             try:
-                timeout = 1.5 * float( timeout[len(str(self.controller_number))+2:] )
-            except ValueError:
+                timeout = 2.5 * float( timeout[len(str(self.controller_number))+2:] )
+            except TypeError:
                 timeout = 15
+            timeout = min( timeout, 15 )
 
         start = time.time()
         self.write( "PA" + target )
         try:
             _pos = float(self.query( "PA?" )[len(str(self.controller_number))+2:])
         except ValueError:
+            _pos = 1e30
+        except TypeError:
             _pos = 1e30
         while abs( _pos  - float(target) ) < abs( float(old_pos) - float(target) ):
             if (time.time() - start) > timeout:
