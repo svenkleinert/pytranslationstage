@@ -1,4 +1,4 @@
-import pyvisa 
+import pyvisa
 import pyvisa.constants
 import time
 DEBUG = True
@@ -11,6 +11,7 @@ class SMC100PP( ):
     def from_device( device ):
         return SMC100PP( serial_port=device )
 
+    translation_limits = (-0.04, 0.04)
     baudrate = 57600
     controller_states = {
         "0A":"NOT REFERENCED from reset",
@@ -40,7 +41,7 @@ class SMC100PP( ):
         if resource_manager is None:
             resource_manager = pyvisa.ResourceManager()
         self.resource_manager = resource_manager
-        
+
         if serial_port is None:
             serial_port = self.serial_port_dialog()
         self.device = self.resource_manager.open_resource( serial_port )
@@ -51,6 +52,7 @@ class SMC100PP( ):
         self.device.set_visa_attribute(pyvisa.constants.VI_ATTR_ASRL_FLOW_CNTRL, pyvisa.constants.VI_ASRL_FLOW_XON_XOFF)
         self.device.write_termination = "\r\n"
         self.device.read_termination = "\r\n"
+        self.timeout = 3
 
         self.controller_number = str(controller_number)
         if not "READY" in self.controller_states[self.get_controller_state()]:
@@ -58,7 +60,7 @@ class SMC100PP( ):
             self.home_search()
         self.name = "SMC100PP (" + serial_port + ")"
 
-        
+
     def open( self ):
         self.device.open()
 
@@ -74,10 +76,23 @@ class SMC100PP( ):
     def read( self ):
         return self.device.read()
 
-    def query( self, msg ):
+    def query( self, msg, delay=0.5, timeout=None ):
         try:
-            return self.device.query( self.controller_number + msg, 0.5 )
+            if timeout is not None:
+                tmp_timeout = self.timeout
+                self.timeout = timeout
+            res = self.device.query( self.controller_number + msg, delay )
+
+            if timeout is not None:
+                self.timeout = tmp_timeout
+            self.device.flush( pyvisa.constants.BufferType.read )
+            self.device.flush( pyvisa.constants.BufferType.write )
+            return res
         except Exception as inst:
+            if timeout is not None:
+                self.timeout = tmp_timeout
+            self.device.flush( pyvisa.constants.BufferType.read )
+            self.device.flush( pyvisa.constants.BufferType.write )
             print( inst )
 
     def serial_port_dialog( self ):
@@ -142,7 +157,7 @@ class SMC100PP( ):
 
     def move_absolute( self, position, timeout=None ):
         if DEBUG:
-            print( "[SMC100PP] move absolute {0:.2f}".format( position ) )
+            print( "[SMC100PP] move absolute {0:.3f}".format( position ) )
         try:
             old_pos = self.query( "PA?" )
             while( "PA" not in old_pos ):
@@ -150,7 +165,7 @@ class SMC100PP( ):
         except TypeError:
             old_pos = "PA010"
         old_pos = old_pos[old_pos.find( "PA" )+2:]
-        target = "{0:.2f}".format( position )
+        target = "{0:.2f}".format( position * 1000 )
         if old_pos == target:
             if DEBUG:
                 print( "[SMC100PP] move absolute: no movement required!" )
@@ -195,7 +210,7 @@ class SMC100PP( ):
 
     def move_relative( self, position, timeout=None ):
         while self.get_controller_state() != "28":
-            self.write( "PR{0:.2f}".format( position ) )
+            self.write( "PR{0:.2f}".format( position * 1000 ) )
         if timeout is None:
             timeout = 3 * float( self.query( "PT{0:.2f}".format(position) )[len(str(self.controller_number))+2:] )
         start = time.time()
