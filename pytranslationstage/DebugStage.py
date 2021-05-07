@@ -4,6 +4,7 @@ import time
 
 class DebugStage( ):
     name = "DebugStage"
+    translation_limits = (-0.1, 0.1)
     def scan():
         if VERBOSE:
             print( "[" + __name__ + "] " + sys._getframe().f_code.co_name )
@@ -18,7 +19,7 @@ class DebugStage( ):
             print( "[" + __name__ + "] " + sys._getframe().f_code.co_name )
         self.position = 0
 
-        
+
     def open( self ):
         if VERBOSE:
             print( "[" + __name__ + "] " + sys._getframe().f_code.co_name )
