@@ -112,7 +112,6 @@ class AbstractTranslationStageWidget( QWidget ):
 
     @Slot()
     def translation_stage_connected( self ):
-        print( self.worker.return_value )
         self.translation_stage_instance = self.worker.return_value
         if self.translation_stage_instance is not None:
             tl_limits = self.translation_stage_instance.translation_limits
