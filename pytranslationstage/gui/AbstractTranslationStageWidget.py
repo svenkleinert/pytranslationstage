@@ -2,10 +2,10 @@ from . import USE_PYSIDE2
 
 if USE_PYSIDE2:
     from PySide2.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QRadioButton, QMessageBox, QLineEdit
-    from PySide2.QtCore import Slot, Qt
+    from PySide2.QtCore import Slot, Signal, Qt
 else:
     from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QRadioButton, QMessageBox, QLineEdit
-    from PyQt5.QtCore import pyqtSlot as Slot, Qt
+    from PyQt5.QtCore import pyqtSlot as Slot, pyqtSignal as Signal, Qt
 
 import pytranslationstage
 from .TranslationStageWorker import TranslationStageWorker
@@ -15,6 +15,8 @@ from .utils import find_unit_prefix
 
 
 class AbstractTranslationStageWidget( QWidget ):
+    translationstage_connected = Signal()
+    translationstage_disconnected = Signal()
     def __init__( self, parent=None ):
         super( AbstractTranslationStageWidget, self ).__init__( parent=parent )
 
@@ -119,6 +121,7 @@ class AbstractTranslationStageWidget( QWidget ):
             self.current_position_slider.setRange( tl_limits[0]/self.dist_prefix,
                 tl_limits[1]/self.dist_prefix )
             self.show_translation_stage_settings()
+            self.translationstage_connected.emit()
 
     @Slot()
     def disconnect_translation_stage( self ):
@@ -127,6 +130,7 @@ class AbstractTranslationStageWidget( QWidget ):
         self.translation_sage_instance = None
         self.current_position_slider.setRange( -100, 100 )
         self.hide_translation_stage_settings()
+        self.translationstage_disconnected.emit()
 
     def show_translation_stage_settings( self ):
         self.connect_button.hide()
