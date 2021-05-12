@@ -43,6 +43,31 @@ class WedgeScanningWidget( AbstractTranslationStageWidget ):
         else:
             self.scan_button = None
 
+    def __iter__( self ):
+        self.deactivate_input()
+
+        start = float( self.start_position_edit.text() )
+        end = float( self.stop_position_edit.text() )
+        steps = int( self.step_edit.text() )
+
+        self.z = np.linspace( start, end, steps )
+        self.z *= self.dist_prefix
+        self.insertions = np.tan( float( self.wedge_angle_edit.text() ) * np.pi / 180 ) * self.z
+        self.i = 0
+        return self
+
+    def __next__( self ):
+        if self.i == len(self.z):
+            self.activate_input()
+            raise StopIteration
+        self.translation_stage_instance.move_absolute( self.z[self.i] )
+
+        self.i += 1
+        return self.insertions[self.i-1]
+
+    def __len__( self ):
+        return int( self.step_edit.text() )
+
     def _show_settings( self ):
         self.form_widget.show()
         if self.scan_button is not None:
