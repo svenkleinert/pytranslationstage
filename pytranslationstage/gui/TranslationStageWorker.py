@@ -1,10 +1,4 @@
-from . import USE_PYSIDE2
-
-if USE_PYSIDE2:
-    from PySide2.QtCore import QThread, Signal
-else:
-    from PyQt5.QtCore import QThread, pyqtSignal as Signal
-
+from . import QThread, Signal
 
 class TranslationStageWorker( QThread ):
     updateSignal = Signal( int )

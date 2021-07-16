@@ -1,11 +1,4 @@
-from . import USE_PYSIDE2
-
-if USE_PYSIDE2:
-    from PySide2.QtWidgets import QSlider
-    from PySide2.QtCore import Slot, Qt
-else:
-    from PyQt5.QtWidgets import QSlider
-    from PyQt5.QtCore import pyqtSlot as Slot
+from . import QSlider, Slot, Qt
 
 import types
 

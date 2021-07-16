@@ -1,11 +1,4 @@
-from . import USE_PYSIDE2
-
-if USE_PYSIDE2:
-    from PySide2.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QRadioButton, QMessageBox, QLineEdit
-    from PySide2.QtCore import Slot, Signal, Qt
-else:
-    from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QRadioButton, QMessageBox, QLineEdit
-    from PyQt5.QtCore import pyqtSlot as Slot, pyqtSignal as Signal, Qt
+from . import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QRadioButton, QMessageBox, QLineEdit, Slot, Signal, Qt
 
 import pytranslationstage
 from .TranslationStageWorker import TranslationStageWorker

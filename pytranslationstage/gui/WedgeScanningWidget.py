@@ -1,12 +1,4 @@
-from . import USE_PYSIDE2
-
-if USE_PYSIDE2:
-    from PySide2.QtWidgets import QWidget, QFormLayout, QLineEdit, QPushButton
-    from PySide2.QtCore import Slot, Signal
-else:
-    from PyQt5.QtWidgets import QWidget, QFormLayout, QLineEdit, QPushButton
-    from PyQt5.QtCore import pyqtSlot as Slot, pyqtSignal as Signal
-
+from . import QWidget, QFormLayout, QLineEdit, QPushButton, Slot, Signal
 from .AbstractTranslationStageWidget import AbstractTranslationStageWidget
 from .TranslationStageWorker import TranslationStageWorker
 
