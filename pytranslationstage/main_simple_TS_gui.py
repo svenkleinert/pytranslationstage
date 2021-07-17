@@ -1,12 +1,7 @@
 import sys
 
 def main():
-    from  pytranslationstage.gui import USE_PYQT5, USE_PYSIDE2
-    if USE_PYSIDE2:
-        from PySide2.QtWidgets import QApplication
-    elif USE_PYQT5:
-        from PyQt5.QtWidgets import QApplication
-    from pytranslationstage.gui import AbstractTranslationStageWidget
+    from pytranslationstage.gui import QApplication, AbstractTranslationStageWidget
     app = QApplication( sys.argv )
     dialog = AbstractTranslationStageWidget()
     dialog.show()
