@@ -1,9 +1,10 @@
 VERBOSE = True
 import sys
 import time
+from .AbstractStage import AbstractStage
 
-class DebugStage( ):
-    name = "DebugStage"
+class DebugStage(AbstractStage):
+    name = __name__
     translation_limits = (-0.1, 0.1)
     def scan():
         if VERBOSE:

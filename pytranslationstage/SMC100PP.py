@@ -1,9 +1,10 @@
 import pyvisa
 import pyvisa.constants
 import time
+from .AbstractStage import AbstractStage
 DEBUG = True
 
-class SMC100PP( ):
+class SMC100PP(AbstractStage):
     def scan():
         rm = pyvisa.ResourceManager()
         return [r[1].alias for r in rm.list_resources_info("ASRL?*::INSTR").items()]
@@ -58,7 +59,7 @@ class SMC100PP( ):
         if not "READY" in self.controller_states[self.get_controller_state()]:
             self.reset_controller()
             self.home_search()
-        self.name = "SMC100PP (" + serial_port + ")"
+        self.name = __name__ + " (" + serial_port + ")"
 
 
     def open( self ):
