@@ -18,10 +18,11 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        "pyserial>=1.11.0",
-        "pyside2>=5.14.1", #toggle if you want to use pyside2 instead of PyQt5
-        #"PyQt5>=5.12.3",
+        "pyvisa>=1.11",
+        #"pyside2>=5.14.1", #toggle if you want to use pyside2 instead of PyQt5
+        "PyQt5>=5.12.3",
         "numpy>=1.18.1",
+        "pyvisa-py>=0.5.0",
 
     ],
     entry_points={
