@@ -1,8 +1,6 @@
 from abc import ABC
 
 class AbstractStage(ABC):
-    name = __name__
-    
     @property
     def translation_limits(self):
         raise NotImplementedError("translation_limits")
