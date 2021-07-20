@@ -1,34 +1,63 @@
-const byte dirPin = 3;
-const byte stepPin = 4;
-const byte enablePin = 10;
+const byte DIRECTION_PIN = 3;
+const byte STEP_PIN = 4;
+const byte ENABLE_PIN = 10;
+const byte SLEEP_PIN = 5;
+const byte RESET_PIN = 6;
 
-const byte bouncerPin = 2;
+
+const byte MICROSTEPPING_PIN1 = 7;
+const byte MICROSTEPPING_PIN2 = 8;
+const byte MICROSTEPPING_PIN3 = 9;
+
+const byte BOUNCER_PIN = 2;
 const bool isBouncerOnHighSide = true;
+bool wasHomingPerformed = false;
 
-const int baudrate = 115200;
+const byte MICROSTEPS_PER_STEP = 1;
+
+const long baudrate = 115200;
 
 const float screwPitch = 0.002;
 const int stepsPerRevolution = 200;
 
+const float LOWER_BOUND = 0;
+const float UPPER_BOUND = 0.298;
 
 
-
-#include <AccelStepper.h>
-AccelStepper stepper(AccelStepper::DRIVER, stepPin, dirPin);
+#include <FlexyStepper.h>
+FlexyStepper stepper;
 
 #include "Vrekrer_scpi_parser.h"
-#define FIRMWARE_VERSION "1.1.0" // Firmware version
+#define FIRMWARE_VERSION "1.0.0" // Firmware version
 SCPI_Parser command_parser;
 
-void setup() {
+void setup()
+{
   // put your setup code here, to run once:
   Serial.begin(baudrate);
-  pinMode(bouncerPin, INPUT_PULLUP);
+  
+  pinMode(BOUNCER_PIN, INPUT_PULLUP);
 
-  stepper.setEnablePin(enablePin);
-  stepper.setCurrentPosition(-1);
+  setupMicrostepping();
+  
+  pinMode(SLEEP_PIN, OUTPUT);
+  digitalWrite(SLEEP_PIN, LOW);
+  pinMode(RESET_PIN, OUTPUT);
+  digitalWrite(RESET_PIN, HIGH);
+  
+  pinMode(ENABLE_PIN, OUTPUT);
+  digitalWrite(ENABLE_PIN, LOW);
+  
+
+  stepper.connectToPins(STEP_PIN, DIRECTION_PIN);
+  
+  stepper.setSpeedInStepsPerSecond(1000.);
+  stepper.setAccelerationInStepsPerSecondPerSecond(100000.);
 
   command_parser.RegisterCommand("*IDN?", &scpiSendID);
+  command_parser.RegisterCommand("*RST", &scpiReset);
+  command_parser.RegisterCommand("*CLS", &scpiClearError);
+  command_parser.RegisterCommand("*STB?", &scpiClearError);
   
   command_parser.SetCommandTreeBase("SYSTem");
   command_parser.RegisterCommand(":HOme", &scpiHomeSearch);
@@ -36,56 +65,89 @@ void setup() {
   
   command_parser.SetCommandTreeBase("MOve");
   command_parser.RegisterCommand(":RELative#", &scpiMoveRelative);
+  command_parser.RegisterCommand(":RELative-#", &scpiMoveRelative);
+  command_parser.RegisterCommand(":REL-#", &scpiMoveRelative);
   command_parser.RegisterCommand(":ABSolute#", &scpiMoveAbsolute);
   command_parser.RegisterCommand(":POSition#", &scpiMoveAbsolute);
   command_parser.RegisterCommand(":POSition?", &scpiSendPosition);
-  
-
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-
-}
-
-void sendCurrentPosition()
+void loop()
 {
-  long pos = stepper.currentPosition();
-  if(pos == -1)
+  // put your main code here, to run repeatedly:
+  command_parser.ProcessInput(Serial, "\n");
+
+  if(!stepper.motionComplete())
   {
-    Serial.println("NONE");
+    stepper.processMovement();
   }else{
-    Serial.println((float) pos * screwPitch / stepsPerRevolution);
+    digitalWrite(SLEEP_PIN, LOW);
+  }
+  
+}
+
+void setupMicrostepping()
+{
+  pinMode(MICROSTEPPING_PIN1, OUTPUT);
+  pinMode(MICROSTEPPING_PIN2, OUTPUT);
+  pinMode(MICROSTEPPING_PIN3, OUTPUT);
+  digitalWrite(MICROSTEPPING_PIN1, LOW);
+  digitalWrite(MICROSTEPPING_PIN1, LOW);
+  digitalWrite(MICROSTEPPING_PIN1, LOW);
+  if(MICROSTEPS_PER_STEP == 2)
+  {
+    digitalWrite(MICROSTEPPING_PIN1, HIGH);
+  }
+  if(MICROSTEPS_PER_STEP == 4)
+  {
+    digitalWrite(MICROSTEPPING_PIN2, HIGH);
+  }
+  if(MICROSTEPS_PER_STEP == 8)
+  {
+    digitalWrite(MICROSTEPPING_PIN1, HIGH);
+    digitalWrite(MICROSTEPPING_PIN2, HIGH);
+  }
+  if(MICROSTEPS_PER_STEP == 16)
+  {
+    digitalWrite(MICROSTEPPING_PIN3, HIGH);
+  }
+  if(MICROSTEPS_PER_STEP == 32)
+  {
+    digitalWrite(MICROSTEPPING_PIN1, HIGH);
+    digitalWrite(MICROSTEPPING_PIN2, HIGH);
+    digitalWrite(MICROSTEPPING_PIN3, HIGH);
   }
 }
 
 void homeSearch()
 {
-  while(digitalRead(bouncerPin))
-  {
-    stepper.move(-1);
-  }
-  stepper.move(1);
-  stepper.setCurrentPosition(0);
+  digitalWrite(SLEEP_PIN, HIGH);
+  stepper.moveToHomeInSteps(isBouncerOnHighSide?1:-1, 1000., 1000000., BOUNCER_PIN);
+  stepper.setTargetPositionInSteps(0);
+  digitalWrite(SLEEP_PIN, LOW);
+  wasHomingPerformed = true;
 }
 
 void moveAbsolute(float value)
 {
-  if(stepper.currentPosition() != -1 and value > 0)
+  if(wasHomingPerformed and stepper.motionComplete() and value >= LOWER_BOUND and value <= UPPER_BOUND)
   {
-    long pos = value / screwPitch * stepsPerRevolution;
-    stepper.moveTo(pos);
+    digitalWrite(SLEEP_PIN, HIGH);
+    long pos = -positionToSteps(value);
+    stepper.setTargetPositionInSteps(pos);
+    
   }
 }
 
 void moveRelative(float value)
 {
-  if(stepper.currentPosition() != -1)
+  if(wasHomingPerformed and stepper.motionComplete())
   {
-    long steps = value * screwPitch / stepsPerRevolution;
-    if(stepper.currentPosition() + steps >= 0)
+    long steps = - positionToSteps(value);
+    if(stepper.getCurrentPositionInSteps() + steps <= positionToSteps(LOWER_BOUND) and stepper.getCurrentPositionInSteps() + steps >= - positionToSteps(UPPER_BOUND))
     {
-      stepper.move(steps);
+      digitalWrite(SLEEP_PIN, HIGH);
+      stepper.setTargetPositionRelativeInSteps(steps);
     }
   }
 }
@@ -94,7 +156,16 @@ void moveRelative(float value)
 void scpiSendID(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
   char idn[] = "STEPDUINO,001,001,"FIRMWARE_VERSION;
-  Serial.println(idn);
+  interface.println(idn);
+}
+void scpiReset(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
+{
+
+}
+
+void scpiClearError(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
+{
+
 }
 
 void scpiHomeSearch(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
@@ -104,29 +175,71 @@ void scpiHomeSearch(SCPI_Commands commands, SCPI_Parameters parameters, Stream &
 
 void scpiSendDeviceState(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
-  Serial.println("state");
+  scpiReplyCommand(commands, interface);
+  if(!wasHomingPerformed)
+  {
+    interface.println("UNINITIALIZED");
+  }else{
+    if(!stepper.motionComplete())
+    {
+      interface.println("MOVING");
+    }else{
+      interface.println("READY");
+    }
+  }
+  
 }
 
 void scpiMoveRelative(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
   String header = String(commands.Last());
   header.toUpperCase();
-  int suffix = -1;
-  sscanf(header.c_str(),"%*[REL]%u", &suffix);
-  moveRelative(suffix);
+  char num_str[20];
+  sscanf(header.c_str(),"%*[RELATIVE]%s", &num_str);
+  String s(num_str);
+  float pos = s.toFloat();
+  moveRelative(pos);
 }
 
 void scpiMoveAbsolute(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
   String header = String(commands.Last());
   header.toUpperCase();
-  int suffix = -1;
-  sscanf(header.c_str(),"%*[ABS]%u", &suffix);
-  moveAbsolute(suffix);
+  char num_str[20];
+  sscanf(header.c_str(),"%*[ABSOLUTE]%s", &num_str);
+  String s(num_str);
+  float pos = s.toFloat();
+  moveAbsolute(pos);
 }
 
 void scpiSendPosition(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
-  float pos = stepper.currentPosition() * screwPitch / stepsPerRevolution;
-  Serial.println(pos);
+  scpiReplyCommand(commands, interface);
+  if(stepper.getCurrentPositionInSteps() == -1)
+  {
+    interface.println("NONE");
+  }else{
+    float pos = - stepsToPosition(stepper.getCurrentPositionInSteps()); 
+    interface.println(pos, 6);
+  }
+}
+
+void scpiReplyCommand(SCPI_Commands commands, Stream &interface)
+{
+  for(int i=0; i<commands.Size()-1; i++)
+    {
+      interface.print(commands[i]);
+      interface.print(":");
+    }
+    interface.print(commands.Last());
+}
+
+float stepsToPosition(long steps)
+{
+ return steps * ((float)screwPitch / stepsPerRevolution / MICROSTEPS_PER_STEP);
+}
+
+long positionToSteps(float pos)
+{
+  return pos / screwPitch * stepsPerRevolution * MICROSTEPS_PER_STEP;
 }
