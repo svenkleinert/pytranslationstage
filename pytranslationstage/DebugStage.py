@@ -6,14 +6,18 @@ from .AbstractStage import AbstractStage
 class DebugStage(AbstractStage):
     name = __name__
     translation_limits = (-0.1, 0.1)
-    def scan():
+
+    @classmethod
+    def scan(cls):
         if VERBOSE:
             print( "[" + __name__ + "] " + sys._getframe().f_code.co_name )
         return ["Debug Stage"]
-    def from_device( device ):
+
+    @classmethod
+    def from_device(cls, device):
         if VERBOSE:
             print( "[" + __name__ + "] " + sys._getframe().f_code.co_name )
-        return DebugStage()
+        return cls()
 
     def __init__( self, serial_port=None, controller_number=1 ):
         if VERBOSE:

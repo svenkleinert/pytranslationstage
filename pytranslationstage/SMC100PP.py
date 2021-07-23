@@ -5,12 +5,14 @@ from .AbstractStage import AbstractStage
 DEBUG = True
 
 class SMC100PP(AbstractStage):
-    def scan():
+    @classmethod
+    def scan(cls):
         rm = pyvisa.ResourceManager()
         return [r[1].alias for r in rm.list_resources_info("ASRL?*::INSTR").items()]
 
-    def from_device( device ):
-        return SMC100PP( serial_port=device )
+    @classmethod
+    def from_device(cls, device):
+        return cls(serial_port=device)
 
     translation_limits = (-0.04, 0.04)
     baudrate = 57600
