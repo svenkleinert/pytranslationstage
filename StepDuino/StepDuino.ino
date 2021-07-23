@@ -19,10 +19,10 @@ const long baudrate = 115200;
 
 const float screwPitch = 0.002;
 const int stepsPerRevolution = 200;
+const float stepsPerSecond = 1000.;
 
 const float LOWER_BOUND = 0;
 const float UPPER_BOUND = 0.298;
-
 
 #include <FlexyStepper.h>
 FlexyStepper stepper;
@@ -51,7 +51,7 @@ void setup()
 
   stepper.connectToPins(STEP_PIN, DIRECTION_PIN);
   
-  stepper.setSpeedInStepsPerSecond(1000.);
+  stepper.setSpeedInStepsPerSecond(stepsPerSecond);
   stepper.setAccelerationInStepsPerSecondPerSecond(100000.);
 
   command_parser.RegisterCommand("*IDN?", &scpiSendID);
@@ -64,13 +64,15 @@ void setup()
   command_parser.RegisterCommand(":STAte?", &scpiSendDeviceState);
   
   command_parser.SetCommandTreeBase("MOve");
-  command_parser.RegisterCommand(":RELative#", &scpiMoveRelative);
-  command_parser.RegisterCommand(":RELative-#", &scpiMoveRelative);
-  command_parser.RegisterCommand(":REL-#", &scpiMoveRelative);
-  command_parser.RegisterCommand(":ABSolute#", &scpiMoveAbsolute);
-  command_parser.RegisterCommand(":POSition#", &scpiMoveAbsolute);
+  command_parser.RegisterCommand(":RELative", &scpiMoveRelative);
+  command_parser.RegisterCommand(":RELative?", &scpiSendTimeMoveRelative);
+  command_parser.RegisterCommand(":ABSolute", &scpiMoveAbsolute);
+  command_parser.RegisterCommand(":ABSolute?", &scpiSendTimeMoveAbsolute);
+  command_parser.RegisterCommand(":POSition", &scpiMoveAbsolute);
   command_parser.RegisterCommand(":POSition?", &scpiSendPosition);
-}
+  command_parser.RegisterCommand(":LIMits:MAXimum?", &scpiSendLimitsMax);
+  command_parser.RegisterCommand(":LIMits:MINimum?", &scpiSendLimitsMin);
+}  
 
 void loop()
 {
@@ -122,8 +124,9 @@ void setupMicrostepping()
 void homeSearch()
 {
   digitalWrite(SLEEP_PIN, HIGH);
-  stepper.moveToHomeInSteps(isBouncerOnHighSide?1:-1, 1000., 1000000., BOUNCER_PIN);
+  stepper.moveToHomeInSteps(isBouncerOnHighSide?1:-1, stepsPerSecond, 1000000., BOUNCER_PIN);
   stepper.setTargetPositionInSteps(0);
+  
   digitalWrite(SLEEP_PIN, LOW);
   wasHomingPerformed = true;
 }
@@ -135,7 +138,6 @@ void moveAbsolute(float value)
     digitalWrite(SLEEP_PIN, HIGH);
     long pos = -positionToSteps(value);
     stepper.setTargetPositionInSteps(pos);
-    
   }
 }
 
@@ -148,6 +150,7 @@ void moveRelative(float value)
     {
       digitalWrite(SLEEP_PIN, HIGH);
       stepper.setTargetPositionRelativeInSteps(steps);
+      
     }
   }
 }
@@ -192,36 +195,73 @@ void scpiSendDeviceState(SCPI_Commands commands, SCPI_Parameters parameters, Str
 
 void scpiMoveRelative(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
-  String header = String(commands.Last());
-  header.toUpperCase();
-  char num_str[20];
-  sscanf(header.c_str(),"%*[RELATIVE]%s", &num_str);
-  String s(num_str);
-  float pos = s.toFloat();
-  moveRelative(pos);
+  if(parameters.Size()>0)
+  {
+    String s(parameters[0]);
+    float pos = s.toFloat();
+    moveRelative(pos);
+  }
+}
+
+void scpiSendTimeMoveRelative(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
+{
+  if(parameters.Size()>0)
+  {
+    String s(parameters[0]);
+    float t = 1.1 * positionToSteps(s.toFloat()) / stepsPerSecond;
+    scpiReplyCommand(commands, interface);
+    interface.println(t, 6);
+  }
 }
 
 void scpiMoveAbsolute(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
-  String header = String(commands.Last());
-  header.toUpperCase();
-  char num_str[20];
-  sscanf(header.c_str(),"%*[ABSOLUTE]%s", &num_str);
-  String s(num_str);
-  float pos = s.toFloat();
-  moveAbsolute(pos);
+  if(parameters.Size()>0)
+  {
+    String s(parameters[0]);
+    float pos = s.toFloat();
+    moveAbsolute(pos);
+  }
+}
+
+void scpiSendTimeMoveAbsolute(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
+{
+  if(parameters.Size()>0)
+  {
+    String s(parameters[0]);
+    float t = 1.1 * (float)abs(-stepper.getCurrentPositionInSteps() - positionToSteps(s.toFloat())) / stepsPerSecond;
+    scpiReplyCommand(commands, interface);
+    interface.println(t, 6);
+  }
 }
 
 void scpiSendPosition(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
 {
-  scpiReplyCommand(commands, interface);
-  if(stepper.getCurrentPositionInSteps() == -1)
+  if( parameters.Size() == 0)
   {
-    interface.println("NONE");
+    scpiReplyCommand(commands, interface);
+    if(stepper.getCurrentPositionInSteps() == -1)
+    { 
+      interface.println("NONE");
+    }else{
+      float pos = - stepsToPosition(stepper.getCurrentPositionInSteps()); 
+      interface.println(pos, 6);
+    }
   }else{
-    float pos = - stepsToPosition(stepper.getCurrentPositionInSteps()); 
-    interface.println(pos, 6);
+    scpiSendTimeMoveAbsolute(commands, parameters, interface);
   }
+}
+
+void scpiSendLimitsMin(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
+{
+  scpiReplyCommand(commands, interface);
+  interface.println(LOWER_BOUND, 6);
+}
+
+void scpiSendLimitsMax(SCPI_Commands commands, SCPI_Parameters parameters, Stream &interface)
+{
+  scpiReplyCommand(commands, interface);
+  interface.println(UPPER_BOUND, 6);
 }
 
 void scpiReplyCommand(SCPI_Commands commands, Stream &interface)

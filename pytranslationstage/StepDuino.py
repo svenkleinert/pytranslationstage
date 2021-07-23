@@ -1,16 +1,15 @@
-import pyvisa
+import serial
+import serial.tools.list_ports
+import time
 from .AbstractStage import AbstractStage
 
-class StepDuino(AbstractStage):
+
+class StepDuino(serial.Serial):
     @classmethod
     def scan(cls):
-        rm = pyvisa.ResourceManager()
         res = []
-        for r in rm.list_resources_info("ASRL?*::INSTR").items():
-            if r[1].alias is None:
-                res.append(r[0])
-            else:
-                res.append(r[1].alias)
+        for port in serial.tools.list_ports.comports():
+            res.append(port.device)
         return res
 
 
@@ -18,83 +17,136 @@ class StepDuino(AbstractStage):
     def from_device(cls, device):
         return cls(serial_port=device)
 
-    def __init__(self, serial_port=None, baudrate=9600, resource_manager=None):
-        if resource_manager is None:
-            resource_manager = pyvisa.ResourceManager()
-        
+    def __init__(self, serial_port=None, baudrate=115200, timeout=None):
         if serial_port is None:
             serial_port = self.serial_port_dialog()
-        self.device = resource_manager.open_resource(serial_port)
-
-        self.device.baud_rate=baudrate
-        self.device.data_bits = 8
-        self.device.parity = pyvisa.constants.Parity.none
-        self.device.stop_bits = pyvisa.constants.StopBits.one
-        self.device.write_termination = "\r\n"
-        self.device.read_termination = ""
-
-        self.device.timeout = 1000
-    
+        super(StepDuino, self).__init__(serial_port, baudrate=baudrate, timeout=timeout)
         self.name = __name__ + " (" + serial_port + ")"
-        self.device.open()
-        self.device.write("*IDN?")
-        print( self.device.read())
-        print( self._query("*IDN?") )
+        
+        if timeout is None:
+            self.timeout = 1
+
+        if not self.is_open:
+            self.open()
+        
+        time.sleep(1.5) # wait until arduino boot finished
+
+        self._get_translation_limits()
+
         if self._controller_state != "READY":
             self._home_search()
 
         self.position = self.get_position()
 
     def _write(self, msg):
-        nbytes = self.device.write(msg)
-        print(nbytes, len(msg))
-        if nbytes == len(msg):
+        if self.out_waiting != 0:
+            self.reset_output_buffer()
+        nbytes = self.write((msg + '\n').encode("utf-8"))
+        if nbytes == len(msg)+1:
             return True
         return False
 
-    def _query(self, msg):
-        return self.device.query(msg)
+    @classmethod
+    def _validate_answer(cls, msg, response):
+        if msg == response[:len(msg)]:
+            return response[len(msg):]
+        else:
+            return ""
+
+    def _query(self, msg, delay=None, validate=True):
+        if self.in_waiting != 0:
+            self.reset_input_buffer()
+        if self._write(msg):
+            if delay is not None:
+                time.sleep(delay)
+            try:
+                response = self.read_until().decode("utf-8")[:-2]
+                if ' ' in msg:
+                    msg = msg.split(' ')[0]
+                if validate:
+                    return self._validate_answer(msg, response)
+                return response
+            except UnicodeDecodeError as e:
+                print( "Warning:", e )
+                self.reset_input_buffer()
+                return ""
+        else:
+            return ""
+
+
+    def _get_translation_limits(self):
+        response = self._query("MOVE:LIMITS:MAXIMUM?")
+        try:
+            _max = float(response)
+        except Exception as e:
+            _max = None
+
+        response = self._query("MOVE:LIMITS:MINIMUM?")
+        try:
+            _min = float(response)
+        except Exception as e:
+            _min = None
+
+        self.translation_limits = (_min, _max)
+        return self.translation_limits
+
+
 
     def _home_search(self, timeout=30):
-        tmp_timeout = self.device.timeout
-        self.device.timeout = timeout * 1000
+        tmp_timeout = self.timeout
+        self.timeout = timeout * 1000
         self._write("SYSTEM:HOME")
         while self._controller_state() == "MOVING":
             pass
         
-        self.device.timeout = tmp_timeout
-        if self._controller_state() == "REEADY":
+        self.timeout = tmp_timeout
+        if self._controller_state() == "READY":
             return True
 
         return False
 
     def _controller_state(self):
-        return self._query("SYSTEM:STATE?")
+        response = self._query("SYSTEM:STATE?")
+        if response != "":
+            return response
+        return "COMMERROR"
 
     
     def move_absolute(self, position):
-        self._write("MOVE:ABSOLUTE{0:.6f}".format(position))
+        try:
+            time_for_move = float(self._query("MOVE:ABSOLUTE? {0:.6f}".format(position)))
+        except Exception as e:
+            print("WARNING:", e)
+            time_for_move = 1
+        self._write("MOVE:ABSOLUTE {0:.6f}".format(position))
+        time.sleep(float(time_for_move))
         while self._controller_state() == "MOVING":
-            pass
+            time.sleep(0.3)
         if self.get_position() != position:
             return False
         return True
 
     def move_relative(self, position):
-        self._write("MOVE:RELATIVE{0:.6f}".format(position))
+        try:
+            time_for_move = float(self._query("MOVE:RELATIVE? {0:.6f}".format(position)))
+        except Exception as e:
+            print("WARNING:", e)
+            time_for_move = 1
+
+        self._write("MOVE:RELATIVE {0:.6f}".format(position))
+        time.sleep(float(time_for_move))
         while self._controller_state() == "MOVING":
-            pass
+            time.sleep(0.3)
         old_pos = self.position
         if self.get_position() - old_pos != position:
             return False
         return True
 
     def get_position(self):
-        pos = self._query("MOVE:POSITION?")
+        response = self._query("MOVE:POSITION?")
         try:
-            self.position = float(pos)
+            self.position = float(response)
         except Exception as e:
-            print( pos, e )
             self.position = None
-    
         return self.position
+
