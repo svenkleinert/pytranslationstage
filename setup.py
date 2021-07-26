@@ -23,7 +23,7 @@ setuptools.setup(
         "PyQt5>=5.12.3",
         "numpy>=1.18.1",
         "pyvisa-py>=0.5.0",
-
+        "pyserial>=3.5",
     ],
     entry_points={
         "console_scripts":[ "TranslationStageGUI = pytranslationstage.main_simple_TS_gui:main", "WedgeTranslationGUI = pytranslationstage.main_wedge_gui:main" ]
