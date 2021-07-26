@@ -53,7 +53,12 @@ class AbstractTranslationStageWidget( QWidget ):
 
         self.current_position_edit = QLineEdit("0")
         self.current_position_edit.hide()
-        self.current_position_edit.setMaximumWidth( 32 )
+
+        fm = self.current_position_edit.fontMetrics()
+        m = self.current_position_edit.textMargins()
+        c = self.current_position_edit.contentsMargins()
+        w = 4*fm.width('x')+m.left()+m.right()+c.left()+c.right()
+        self.current_position_edit.setFixedWidth( w + 8 )
         self.hbox.addWidget( self.current_position_edit )
 
 
