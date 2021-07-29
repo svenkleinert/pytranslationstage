@@ -1,5 +1,5 @@
 
-__version__ = "0.0.2"
+__version__ = "1.0.0"
 
 DEBUG = False
 USE_PYQT5 = True
