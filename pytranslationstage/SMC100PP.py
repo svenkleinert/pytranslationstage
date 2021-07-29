@@ -40,6 +40,7 @@ class SMC100PP(AbstractStage):
         "47":"JOGGING from DISABLE"
         }
     def __init__( self, serial_port=None, resource_manager=None, controller_number=1 ):
+        self.id = serial_port
         self.retry = 0
         if resource_manager is None:
             resource_manager = pyvisa.ResourceManager()

@@ -6,6 +6,7 @@ from .AbstractStage import AbstractStage
 class DebugStage(AbstractStage):
     name = __name__
     translation_limits = (-0.1, 0.1)
+    id = 0
 
     @classmethod
     def scan(cls):

@@ -21,6 +21,7 @@ class StepDuino(serial.Serial):
         if serial_port is None:
             serial_port = self.serial_port_dialog()
         super(StepDuino, self).__init__(serial_port, baudrate=baudrate, timeout=timeout)
+        self.id = serial_port
         self.name = __name__ + " (" + serial_port + ")"
         
         if timeout is None:
