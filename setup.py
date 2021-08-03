@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pytranslationstage", # Replace with your own username
-    version="1.0.0",
+    version="1.1.0",
     author="Sven Kleinert",
     author_email="kleinert@iqo.uni-hannover.de",
     description="python translation stage library",
