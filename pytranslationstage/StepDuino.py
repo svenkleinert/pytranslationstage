@@ -4,7 +4,7 @@ import time
 from .AbstractStage import AbstractStage
 
 
-class StepDuino(serial.Serial):
+class StepDuino(serial.Serial, AbstractStage):
     @classmethod
     def scan(cls):
         res = []
