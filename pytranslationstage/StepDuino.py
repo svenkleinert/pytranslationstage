@@ -74,6 +74,10 @@ class StepDuino(serial.Serial, AbstractStage):
         else:
             return ""
 
+    @property
+    def translation_limits(self):
+        return self._translation_limits
+
 
     def _get_translation_limits(self):
         response = self._query("MOVE:LIMITS:MAXIMUM?")
@@ -88,7 +92,7 @@ class StepDuino(serial.Serial, AbstractStage):
         except Exception as e:
             _min = None
 
-        self.translation_limits = (_min, _max)
+        self._translation_limits = (_min, _max)
         return self.translation_limits
 
 
